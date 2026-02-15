@@ -111,6 +111,11 @@ let selectedIdx = -1;
 /** @type {number} */
 let puzzleIdx = 0;
 let currentDifficulty = "Easy";
+const puzzleCycleByDifficulty = {
+  Easy: [],
+  Medium: [],
+  Hard: [],
+};
 
 /** @type {Uint8Array} 0 if empty else 1-9 */
 let given = new Uint8Array(CELL_COUNT);
@@ -243,26 +248,33 @@ function puzzleIndexesByDifficulty(level) {
   return out;
 }
 
-function loadRandomPuzzleByDifficulty(level) {
+function refillPuzzleCycle(level) {
   const pool = puzzleIndexesByDifficulty(level);
-  if (pool.length === 0) return;
+  const cycle = pool.slice();
+  for (let i = cycle.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = cycle[i];
+    cycle[i] = cycle[j];
+    cycle[j] = temp;
+  }
+  puzzleCycleByDifficulty[level] = cycle;
+}
 
-  let pick = pool[Math.floor(Math.random() * pool.length)];
-  if (pool.length > 1 && pick === puzzleIdx) {
-    const idxInPool = pool.indexOf(pick);
-    pick = pool[(idxInPool + 1) % pool.length];
+function loadRandomPuzzleByDifficulty(level) {
+  if (level !== "Easy" && level !== "Medium" && level !== "Hard") return;
+
+  if (!puzzleCycleByDifficulty[level] || puzzleCycleByDifficulty[level].length === 0) {
+    refillPuzzleCycle(level);
   }
 
-  const base = PUZZLES[pick];
-  const transformedGrid = transformPuzzleGrid(base.grid);
-  loadPuzzleFromData(
-    {
-      id: `${base.id}-variant`,
-      difficulty: level,
-      grid: transformedGrid,
-    },
-    pick
-  );
+  let pick = puzzleCycleByDifficulty[level].shift();
+  if (pick === undefined) return;
+
+  if (pick === puzzleIdx && puzzleCycleByDifficulty[level].length > 0) {
+    pick = puzzleCycleByDifficulty[level].shift();
+  }
+
+  loadPuzzle(pick);
 }
 
 function loadPuzzle(nextPuzzleIdx) {
