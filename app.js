@@ -172,6 +172,69 @@ function parsePuzzleGrid(gridStr) {
   return g;
 }
 
+function shuffleCopy(arr) {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = out[i];
+    out[i] = out[j];
+    out[j] = temp;
+  }
+  return out;
+}
+
+function transformPuzzleGrid(gridStr) {
+  const bands = shuffleCopy([0, 1, 2]);
+  const stacks = shuffleCopy([0, 1, 2]);
+
+  const rowPerm = [];
+  for (const band of bands) {
+    const within = shuffleCopy([0, 1, 2]);
+    for (const w of within) rowPerm.push(band * 3 + w);
+  }
+
+  const colPerm = [];
+  for (const stack of stacks) {
+    const within = shuffleCopy([0, 1, 2]);
+    for (const w of within) colPerm.push(stack * 3 + w);
+  }
+
+  const digits = shuffleCopy(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  const digitMap = {
+    "1": digits[0], "2": digits[1], "3": digits[2],
+    "4": digits[3], "5": digits[4], "6": digits[5],
+    "7": digits[6], "8": digits[7], "9": digits[8],
+  };
+
+  let out = "";
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      const srcR = rowPerm[r];
+      const srcC = colPerm[c];
+      const ch = gridStr[srcR * 9 + srcC];
+      out += ch === "." ? "." : digitMap[ch];
+    }
+  }
+  return out;
+}
+
+function loadPuzzleFromData(puzzleData, baseIndex = puzzleIdx) {
+  puzzleIdx = (baseIndex + PUZZLES.length) % PUZZLES.length;
+  const parsed = parsePuzzleGrid(puzzleData.grid);
+
+  given = parsed;
+  values = new Uint8Array(parsed);
+  notes = new Uint16Array(CELL_COUNT);
+
+  initialValues = new Uint8Array(values);
+  initialNotes = new Uint16Array(notes);
+
+  selectedIdx = -1;
+  setDifficulty(puzzleData.difficulty);
+  setStatus("Ready");
+  renderAll();
+}
+
 function puzzleIndexesByDifficulty(level) {
   const out = [];
   for (let i = 0; i < PUZZLES.length; i++) {
@@ -190,26 +253,22 @@ function loadRandomPuzzleByDifficulty(level) {
     pick = pool[(idxInPool + 1) % pool.length];
   }
 
-  loadPuzzle(pick);
+  const base = PUZZLES[pick];
+  const transformedGrid = transformPuzzleGrid(base.grid);
+  loadPuzzleFromData(
+    {
+      id: `${base.id}-variant`,
+      difficulty: level,
+      grid: transformedGrid,
+    },
+    pick
+  );
 }
 
 function loadPuzzle(nextPuzzleIdx) {
   puzzleIdx = (nextPuzzleIdx + PUZZLES.length) % PUZZLES.length;
   const p = PUZZLES[puzzleIdx];
-  const parsed = parsePuzzleGrid(p.grid);
-
-  given = parsed;
-  values = new Uint8Array(parsed);
-  notes = new Uint16Array(CELL_COUNT);
-
-  initialValues = new Uint8Array(values);
-  initialNotes = new Uint16Array(notes);
-
-  selectedIdx = -1;
-  setDifficulty(p.difficulty);
-  setStatus("Ready");
-
-  renderAll();
+  loadPuzzleFromData(p, puzzleIdx);
 }
 
 function resetPuzzle() {
