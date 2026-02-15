@@ -110,6 +110,7 @@ let selectedIdx = -1;
 
 /** @type {number} */
 let puzzleIdx = 0;
+let currentDifficulty = "Easy";
 
 /** @type {Uint8Array} 0 if empty else 1-9 */
 let given = new Uint8Array(CELL_COUNT);
@@ -169,6 +170,27 @@ function parsePuzzleGrid(gridStr) {
     else throw new Error(`Invalid char at ${i}: ${ch}`);
   }
   return g;
+}
+
+function puzzleIndexesByDifficulty(level) {
+  const out = [];
+  for (let i = 0; i < PUZZLES.length; i++) {
+    if (PUZZLES[i].difficulty === level) out.push(i);
+  }
+  return out;
+}
+
+function loadRandomPuzzleByDifficulty(level) {
+  const pool = puzzleIndexesByDifficulty(level);
+  if (pool.length === 0) return;
+
+  let pick = pool[Math.floor(Math.random() * pool.length)];
+  if (pool.length > 1 && pick === puzzleIdx) {
+    const idxInPool = pool.indexOf(pick);
+    pick = pool[(idxInPool + 1) % pool.length];
+  }
+
+  loadPuzzle(pick);
 }
 
 function loadPuzzle(nextPuzzleIdx) {
@@ -459,9 +481,22 @@ function wireEvents() {
   });
 
   els.newPuzzleBtn.addEventListener("click", () => {
-    // simple random different puzzle
-    const next = Math.floor(Math.random() * PUZZLES.length);
-    loadPuzzle(next === puzzleIdx ? (next + 1) % PUZZLES.length : next);
+    loadRandomPuzzleByDifficulty(currentDifficulty);
+  });
+
+  document.querySelectorAll("[data-difficulty]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const level = btn.getAttribute("data-difficulty");
+      if (level !== "Easy" && level !== "Medium" && level !== "Hard") return;
+
+      currentDifficulty = level;
+
+      document.querySelectorAll("[data-difficulty]").forEach((b) => {
+        b.classList.toggle("isActive", b.getAttribute("data-difficulty") === level);
+      });
+
+      loadRandomPuzzleByDifficulty(level);
+    });
   });
 
   els.resetBtn.addEventListener("click", () => resetPuzzle());
@@ -521,7 +556,8 @@ function wireEvents() {
 function init() {
   buildBoardDomOnce();
   wireEvents();
-  loadPuzzle(0);
+  currentDifficulty = "Easy";
+  loadRandomPuzzleByDifficulty(currentDifficulty);
 }
 
 init();
