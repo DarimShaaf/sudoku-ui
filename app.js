@@ -127,6 +127,10 @@ let initialNotes = new Uint16Array(CELL_COUNT);
 /** cache cell nodes for fast updates */
 /** @type {HTMLButtonElement[]} */
 let cellButtons = [];
+/** @type {HTMLSpanElement[]} */
+let cellValueEls = [];
+/** @type {HTMLSpanElement[][]} */
+let cellNoteEls = [];
 
 function idxToRC(idx) {
   return { r: Math.floor(idx / 9), c: idx % 9 };
@@ -229,41 +233,41 @@ function computeConflicts() {
   // Returns a boolean array marking conflicting cells (duplicate non-zero in any unit)
   const conflict = new Uint8Array(CELL_COUNT);
 
-  const markDupes = (indices) => {
-    const seen = new Map(); // digit -> first index
-    for (const idx of indices) {
-      const v = values[idx];
-      if (v === 0) continue;
-      const prev = seen.get(v);
-      if (prev !== undefined) {
-        conflict[idx] = 1;
-        conflict[prev] = 1;
-      } else {
-        seen.set(v, idx);
-      }
+  const seen = new Int8Array(10);
+  const firstPos = new Int16Array(10);
+  const resetUnitState = () => {
+    seen.fill(0);
+    firstPos.fill(-1);
+  };
+
+  const visitCell = (cellIdx) => {
+    const v = values[cellIdx];
+    if (v === 0) return;
+    if (seen[v]) {
+      conflict[cellIdx] = 1;
+      conflict[firstPos[v]] = 1;
+    } else {
+      seen[v] = 1;
+      firstPos[v] = cellIdx;
     }
   };
 
-  // rows
   for (let r = 0; r < 9; r++) {
-    const inds = [];
-    for (let c = 0; c < 9; c++) inds.push(rcToIdx(r, c));
-    markDupes(inds);
+    resetUnitState();
+    for (let c = 0; c < 9; c++) visitCell(rcToIdx(r, c));
   }
-  // cols
+
   for (let c = 0; c < 9; c++) {
-    const inds = [];
-    for (let r = 0; r < 9; r++) inds.push(rcToIdx(r, c));
-    markDupes(inds);
+    resetUnitState();
+    for (let r = 0; r < 9; r++) visitCell(rcToIdx(r, c));
   }
-  // boxes
+
   for (let br = 0; br < 3; br++) {
     for (let bc = 0; bc < 3; bc++) {
-      const inds = [];
+      resetUnitState();
       for (let r = br * 3; r < br * 3 + 3; r++) {
-        for (let c = bc * 3; c < bc * 3 + 3; c++) inds.push(rcToIdx(r, c));
+        for (let c = bc * 3; c < bc * 3 + 3; c++) visitCell(rcToIdx(r, c));
       }
-      markDupes(inds);
     }
   }
 
@@ -282,6 +286,8 @@ function isCompleteAndValid() {
 function buildBoardDomOnce() {
   els.board.innerHTML = "";
   cellButtons = [];
+  cellValueEls = [];
+  cellNoteEls = [];
 
   for (let idx = 0; idx < CELL_COUNT; idx++) {
     const { r, c } = idxToRC(idx);
@@ -304,9 +310,11 @@ function buildBoardDomOnce() {
 
     const notesWrap = document.createElement("div");
     notesWrap.className = "notes";
+    const notesForCell = [];
     for (let d = 1; d <= 9; d++) {
       const n = document.createElement("span");
       n.textContent = String(d);
+      notesForCell.push(n);
       notesWrap.appendChild(n);
     }
 
@@ -318,6 +326,8 @@ function buildBoardDomOnce() {
     });
 
     cellButtons.push(btn);
+    cellValueEls.push(valueSpan);
+    cellNoteEls.push(notesForCell);
     els.board.appendChild(btn);
   }
 }
@@ -369,7 +379,7 @@ function renderCell(idx, conflictArr) {
   btn.classList.toggle("sameValue", selectedIdx !== -1 && sameValue && idx !== selectedIdx);
 
   // content
-  const valueSpan = btn.querySelector(".value");
+  const valueSpan = cellValueEls[idx];
   if (valueSpan) valueSpan.textContent = v === 0 ? "" : String(v);
 
   // notes
@@ -377,7 +387,7 @@ function renderCell(idx, conflictArr) {
   const showNotes = v === 0 && noteMask !== 0;
   btn.classList.toggle("showNotes", showNotes);
 
-  const noteEls = btn.querySelectorAll(".notes span");
+  const noteEls = cellNoteEls[idx];
   if (noteEls && noteEls.length === 9) {
     for (let d = 1; d <= 9; d++) {
       const on = (noteMask & (1 << (d - 1))) !== 0;
@@ -402,7 +412,8 @@ function renderAll() {
   for (let i = 0; i < CELL_COUNT; i++) renderCell(i, conflictArr);
 
   // lightweight status
-  const conflicts = conflictArr.reduce((acc, v) => acc + (v ? 1 : 0), 0);
+  let conflicts = 0;
+  for (let i = 0; i < CELL_COUNT; i++) conflicts += conflictArr[i] ? 1 : 0;
   if (conflicts > 0) setStatus(`Conflicts: ${conflicts}`);
 }
 
