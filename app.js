@@ -116,6 +116,7 @@ const puzzleCycleByDifficulty = {
   Medium: [],
   Hard: [],
 };
+let puzzlePool = null;
 
 /** @type {Uint8Array} 0 if empty else 1-9 */
 let given = new Uint8Array(CELL_COUNT);
@@ -223,8 +224,86 @@ function transformPuzzleGrid(gridStr) {
   return out;
 }
 
+function gridHasGivenConflicts(gridStr) {
+  const vals = parsePuzzleGrid(gridStr);
+
+  const hasDupes = (indices) => {
+    const seen = new Uint8Array(10);
+    for (const i of indices) {
+      const v = vals[i];
+      if (v === 0) continue;
+      if (seen[v]) return true;
+      seen[v] = 1;
+    }
+    return false;
+  };
+
+  for (let r = 0; r < 9; r++) {
+    const rowIndices = [];
+    for (let c = 0; c < 9; c++) rowIndices.push(rcToIdx(r, c));
+    if (hasDupes(rowIndices)) return true;
+  }
+
+  for (let c = 0; c < 9; c++) {
+    const colIndices = [];
+    for (let r = 0; r < 9; r++) colIndices.push(rcToIdx(r, c));
+    if (hasDupes(colIndices)) return true;
+  }
+
+  for (let br = 0; br < 3; br++) {
+    for (let bc = 0; bc < 3; bc++) {
+      const boxIndices = [];
+      for (let r = br * 3; r < br * 3 + 3; r++) {
+        for (let c = bc * 3; c < bc * 3 + 3; c++) boxIndices.push(rcToIdx(r, c));
+      }
+      if (hasDupes(boxIndices)) return true;
+    }
+  }
+
+  return false;
+}
+
+function getPuzzlePool() {
+  if (puzzlePool) return puzzlePool;
+
+  const targetPerDifficulty = 6;
+  const levels = ["Easy", "Medium", "Hard"];
+  const byDiff = { Easy: [], Medium: [], Hard: [] };
+
+  for (const puzzle of PUZZLES) {
+    if (levels.includes(puzzle.difficulty) && !gridHasGivenConflicts(puzzle.grid)) {
+      byDiff[puzzle.difficulty].push(puzzle);
+    }
+  }
+
+  for (const level of levels) {
+    const baseList = byDiff[level].slice();
+    const seen = new Set(baseList.map((p) => p.grid));
+    let attempts = 0;
+
+    while (byDiff[level].length < targetPerDifficulty && baseList.length > 0 && attempts < 500) {
+      attempts++;
+      const base = baseList[Math.floor(Math.random() * baseList.length)];
+      const variantGrid = transformPuzzleGrid(base.grid);
+      if (seen.has(variantGrid)) continue;
+      if (gridHasGivenConflicts(variantGrid)) continue;
+
+      seen.add(variantGrid);
+      byDiff[level].push({
+        id: `${base.id}-v${byDiff[level].length + 1}`,
+        difficulty: level,
+        grid: variantGrid,
+      });
+    }
+  }
+
+  puzzlePool = [...byDiff.Easy, ...byDiff.Medium, ...byDiff.Hard];
+  return puzzlePool;
+}
+
 function loadPuzzleFromData(puzzleData, baseIndex = puzzleIdx) {
-  puzzleIdx = (baseIndex + PUZZLES.length) % PUZZLES.length;
+  const poolSize = getPuzzlePool().length;
+  puzzleIdx = poolSize > 0 ? (baseIndex + poolSize) % poolSize : 0;
   const parsed = parsePuzzleGrid(puzzleData.grid);
 
   given = parsed;
@@ -241,9 +320,10 @@ function loadPuzzleFromData(puzzleData, baseIndex = puzzleIdx) {
 }
 
 function puzzleIndexesByDifficulty(level) {
+  const pool = getPuzzlePool();
   const out = [];
-  for (let i = 0; i < PUZZLES.length; i++) {
-    if (PUZZLES[i].difficulty === level) out.push(i);
+  for (let i = 0; i < pool.length; i++) {
+    if (pool[i].difficulty === level) out.push(i);
   }
   return out;
 }
@@ -278,8 +358,10 @@ function loadRandomPuzzleByDifficulty(level) {
 }
 
 function loadPuzzle(nextPuzzleIdx) {
-  puzzleIdx = (nextPuzzleIdx + PUZZLES.length) % PUZZLES.length;
-  const p = PUZZLES[puzzleIdx];
+  const pool = getPuzzlePool();
+  if (pool.length === 0) return;
+  puzzleIdx = (nextPuzzleIdx + pool.length) % pool.length;
+  const p = pool[puzzleIdx];
   loadPuzzleFromData(p, puzzleIdx);
 }
 
