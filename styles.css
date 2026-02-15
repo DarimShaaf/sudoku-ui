@@ -110,6 +110,16 @@ h1 {
   flex-wrap: wrap;
 }
 
+.seg {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.diffBtn.isActive {
+  background: rgba(124, 58, 237, 0.24);
+  border-color: rgba(124, 58, 237, 0.55);
+}
+
 .btn {
   border: 1px solid var(--stroke);
   background: rgba(255, 255, 255, 0.06);
