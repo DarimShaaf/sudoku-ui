@@ -1,0 +1,517 @@
+/* Sudoku UI (static, no backend) */
+
+const BOARD_SIZE = 9;
+const CELL_COUNT = BOARD_SIZE * BOARD_SIZE;
+
+/**
+ * puzzle strings use '.' for empty, '1'-'9' for givens
+ * (kept in-app for simplicity; no generator needed for UI demo)
+ */
+const PUZZLES = [
+  {
+    id: "easy-1",
+    difficulty: "Easy",
+    grid:
+      "53..7...." +
+      "6..195..." +
+      ".98....6." +
+      "8...6...3" +
+      "4..8.3..1" +
+      "7...2...6" +
+      ".6....28." +
+      "...419..5" +
+      "....8..79",
+  },
+  {
+    id: "easy-2",
+    difficulty: "Easy",
+    grid:
+      "9.3.4...8" +
+      "4.....3.." +
+      "..8.7...." +
+      ".7.....4." +
+      "...8.3..." +
+      ".5.....1." +
+      "....2.8.." +
+      "..3.....6" +
+      "1...5.7.2",
+  },
+  {
+    id: "medium-1",
+    difficulty: "Medium",
+    grid:
+      "..3.2.6.." +
+      "9..3.5..1" +
+      "..18.64.." +
+      "..81.29.." +
+      "7.......8" +
+      "..67.82.." +
+      "..26.95.." +
+      "8..2.3..9" +
+      "..5.1.3..",
+  },
+  {
+    id: "medium-2",
+    difficulty: "Medium",
+    grid:
+      ".4.1....." +
+      "1.....2.9" +
+      "6..8.5..2" +
+      "..4..1..." +
+      ".2.....3." +
+      "...5..4.." +
+      "7..9.3..5" +
+      "8.3.....6" +
+      ".....7.1.",
+  },
+  {
+    id: "hard-1",
+    difficulty: "Hard",
+    grid:
+      "1....7.9." +
+      ".3..2...8" +
+      "..96..5.." +
+      "..53..9.." +
+      ".1..8...2" +
+      "6....4..." +
+      "3......1." +
+      ".4......7" +
+      "..7...3..",
+  },
+  {
+    id: "hard-2",
+    difficulty: "Hard",
+    grid:
+      "..5.3...." +
+      "8.......9" +
+      ".....6.2." +
+      ".2.4.3.7." +
+      "..3.8.5.." +
+      ".1.7.9.4." +
+      ".4.1....." +
+      "2.......8" +
+      "....5.9..",
+  },
+];
+
+const els = {
+  board: document.getElementById("board"),
+  pad: document.getElementById("pad"),
+  newPuzzleBtn: document.getElementById("newPuzzleBtn"),
+  resetBtn: document.getElementById("resetBtn"),
+  checkBtn: document.getElementById("checkBtn"),
+  notesToggle: document.getElementById("notesToggle"),
+  difficultyPill: document.getElementById("difficultyPill"),
+  statusPill: document.getElementById("statusPill"),
+};
+
+/** @type {number} */
+let selectedIdx = -1;
+
+/** @type {number} */
+let puzzleIdx = 0;
+
+/** @type {Uint8Array} 0 if empty else 1-9 */
+let given = new Uint8Array(CELL_COUNT);
+
+/** @type {Uint8Array} 0 if empty else 1-9 (includes givens) */
+let values = new Uint8Array(CELL_COUNT);
+
+/** @type {Uint16Array} notes bitmask (bits 0..8) */
+let notes = new Uint16Array(CELL_COUNT);
+
+/** snapshots used by Reset */
+let initialValues = new Uint8Array(CELL_COUNT);
+let initialNotes = new Uint16Array(CELL_COUNT);
+
+/** cache cell nodes for fast updates */
+/** @type {HTMLButtonElement[]} */
+let cellButtons = [];
+
+function idxToRC(idx) {
+  return { r: Math.floor(idx / 9), c: idx % 9 };
+}
+
+function rcToIdx(r, c) {
+  return r * 9 + c;
+}
+
+function boxIndex(r, c) {
+  return Math.floor(r / 3) * 3 + Math.floor(c / 3);
+}
+
+function inBounds(r, c) {
+  return r >= 0 && r < 9 && c >= 0 && c < 9;
+}
+
+function setStatus(text) {
+  els.statusPill.textContent = text;
+}
+
+function setDifficulty(text) {
+  els.difficultyPill.textContent = `Difficulty: ${text}`;
+}
+
+function parsePuzzleGrid(gridStr) {
+  if (typeof gridStr !== "string" || gridStr.length !== CELL_COUNT) {
+    throw new Error("Invalid puzzle grid string");
+  }
+
+  const g = new Uint8Array(CELL_COUNT);
+  for (let i = 0; i < CELL_COUNT; i++) {
+    const ch = gridStr[i];
+    if (ch === ".") g[i] = 0;
+    else if (ch >= "1" && ch <= "9") g[i] = ch.charCodeAt(0) - 48;
+    else throw new Error(`Invalid char at ${i}: ${ch}`);
+  }
+  return g;
+}
+
+function loadPuzzle(nextPuzzleIdx) {
+  puzzleIdx = (nextPuzzleIdx + PUZZLES.length) % PUZZLES.length;
+  const p = PUZZLES[puzzleIdx];
+  const parsed = parsePuzzleGrid(p.grid);
+
+  given = parsed;
+  values = new Uint8Array(parsed);
+  notes = new Uint16Array(CELL_COUNT);
+
+  initialValues = new Uint8Array(values);
+  initialNotes = new Uint16Array(notes);
+
+  selectedIdx = -1;
+  setDifficulty(p.difficulty);
+  setStatus("Ready");
+
+  renderAll();
+}
+
+function resetPuzzle() {
+  values = new Uint8Array(initialValues);
+  notes = new Uint16Array(initialNotes);
+  setStatus("Reset");
+  renderAll();
+}
+
+function isEditable(idx) {
+  return given[idx] === 0;
+}
+
+function valueAt(r, c) {
+  return values[rcToIdx(r, c)];
+}
+
+function setValueAt(idx, digit) {
+  if (!isEditable(idx)) return;
+
+  const d = Math.max(0, Math.min(9, digit | 0));
+  values[idx] = d;
+  if (d !== 0) notes[idx] = 0; // entering a value clears notes for that cell
+}
+
+function toggleNoteAt(idx, digit) {
+  if (!isEditable(idx)) return;
+  const d = digit | 0;
+  if (d < 1 || d > 9) return;
+  if (values[idx] !== 0) return; // don't store notes when a value exists
+
+  const bit = 1 << (d - 1);
+  notes[idx] ^= bit;
+}
+
+function clearCell(idx) {
+  if (!isEditable(idx)) return;
+  values[idx] = 0;
+  notes[idx] = 0;
+}
+
+function computeConflicts() {
+  // Returns a boolean array marking conflicting cells (duplicate non-zero in any unit)
+  const conflict = new Uint8Array(CELL_COUNT);
+
+  const markDupes = (indices) => {
+    const seen = new Map(); // digit -> first index
+    for (const idx of indices) {
+      const v = values[idx];
+      if (v === 0) continue;
+      const prev = seen.get(v);
+      if (prev !== undefined) {
+        conflict[idx] = 1;
+        conflict[prev] = 1;
+      } else {
+        seen.set(v, idx);
+      }
+    }
+  };
+
+  // rows
+  for (let r = 0; r < 9; r++) {
+    const inds = [];
+    for (let c = 0; c < 9; c++) inds.push(rcToIdx(r, c));
+    markDupes(inds);
+  }
+  // cols
+  for (let c = 0; c < 9; c++) {
+    const inds = [];
+    for (let r = 0; r < 9; r++) inds.push(rcToIdx(r, c));
+    markDupes(inds);
+  }
+  // boxes
+  for (let br = 0; br < 3; br++) {
+    for (let bc = 0; bc < 3; bc++) {
+      const inds = [];
+      for (let r = br * 3; r < br * 3 + 3; r++) {
+        for (let c = bc * 3; c < bc * 3 + 3; c++) inds.push(rcToIdx(r, c));
+      }
+      markDupes(inds);
+    }
+  }
+
+  return conflict;
+}
+
+function isCompleteAndValid() {
+  const conflict = computeConflicts();
+  for (let i = 0; i < CELL_COUNT; i++) {
+    if (values[i] === 0) return { ok: false, reason: "Incomplete" };
+    if (conflict[i]) return { ok: false, reason: "Conflicts" };
+  }
+  return { ok: true, reason: "Solved" };
+}
+
+function buildBoardDomOnce() {
+  els.board.innerHTML = "";
+  cellButtons = [];
+
+  for (let idx = 0; idx < CELL_COUNT; idx++) {
+    const { r, c } = idxToRC(idx);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cell";
+    btn.setAttribute("role", "gridcell");
+    btn.setAttribute("aria-rowindex", String(r + 1));
+    btn.setAttribute("aria-colindex", String(c + 1));
+    btn.dataset.idx = String(idx);
+
+    // thicker 3x3 boundaries
+    if (c === 2 || c === 5) btn.classList.add("bR");
+    if (r === 2 || r === 5) btn.classList.add("bB");
+
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "value";
+    valueSpan.textContent = "";
+
+    const notesWrap = document.createElement("div");
+    notesWrap.className = "notes";
+    for (let d = 1; d <= 9; d++) {
+      const n = document.createElement("span");
+      n.textContent = String(d);
+      notesWrap.appendChild(n);
+    }
+
+    btn.appendChild(valueSpan);
+    btn.appendChild(notesWrap);
+
+    btn.addEventListener("click", () => {
+      selectCell(idx);
+    });
+
+    cellButtons.push(btn);
+    els.board.appendChild(btn);
+  }
+}
+
+function selectCell(idx) {
+  if (idx < 0 || idx >= CELL_COUNT) {
+    selectedIdx = -1;
+    renderAll();
+    return;
+  }
+  selectedIdx = idx;
+  renderAll();
+  cellButtons[idx]?.focus();
+}
+
+function moveSelection(dr, dc) {
+  if (selectedIdx === -1) return;
+  const { r, c } = idxToRC(selectedIdx);
+  const nr = r + dr;
+  const nc = c + dc;
+  if (!inBounds(nr, nc)) return;
+  selectCell(rcToIdx(nr, nc));
+}
+
+function renderCell(idx, conflictArr) {
+  const btn = cellButtons[idx];
+  if (!btn) return;
+
+  const v = values[idx];
+  const isGiven = given[idx] !== 0;
+  const isFilled = v !== 0;
+
+  btn.classList.toggle("given", isGiven);
+  btn.classList.toggle("filled", !isGiven && isFilled);
+  btn.classList.toggle("selected", idx === selectedIdx);
+  btn.classList.toggle("conflict", conflictArr[idx] === 1);
+
+  // selection relationships
+  let related = false;
+  let sameValue = false;
+  if (selectedIdx !== -1) {
+    const a = idxToRC(selectedIdx);
+    const b = idxToRC(idx);
+    related = a.r === b.r || a.c === b.c || boxIndex(a.r, a.c) === boxIndex(b.r, b.c);
+    const sv = values[selectedIdx];
+    sameValue = sv !== 0 && values[idx] === sv;
+  }
+  btn.classList.toggle("related", selectedIdx !== -1 && related && idx !== selectedIdx);
+  btn.classList.toggle("sameValue", selectedIdx !== -1 && sameValue && idx !== selectedIdx);
+
+  // content
+  const valueSpan = btn.querySelector(".value");
+  if (valueSpan) valueSpan.textContent = v === 0 ? "" : String(v);
+
+  // notes
+  const noteMask = notes[idx];
+  const showNotes = v === 0 && noteMask !== 0;
+  btn.classList.toggle("showNotes", showNotes);
+
+  const noteEls = btn.querySelectorAll(".notes span");
+  if (noteEls && noteEls.length === 9) {
+    for (let d = 1; d <= 9; d++) {
+      const on = (noteMask & (1 << (d - 1))) !== 0;
+      noteEls[d - 1].classList.toggle("on", on);
+    }
+  }
+
+  // ARIA
+  const { r, c } = idxToRC(idx);
+  const labelParts = [`Row ${r + 1}`, `Col ${c + 1}`];
+  if (isGiven) labelParts.push(`Given ${v}`);
+  else if (v !== 0) labelParts.push(`Value ${v}`);
+  else if (showNotes) labelParts.push("Notes");
+  else labelParts.push("Empty");
+  btn.setAttribute("aria-label", labelParts.join(", "));
+}
+
+function renderAll() {
+  if (cellButtons.length !== CELL_COUNT) buildBoardDomOnce();
+
+  const conflictArr = computeConflicts();
+  for (let i = 0; i < CELL_COUNT; i++) renderCell(i, conflictArr);
+
+  // lightweight status
+  const conflicts = conflictArr.reduce((acc, v) => acc + (v ? 1 : 0), 0);
+  if (conflicts > 0) setStatus(`Conflicts: ${conflicts}`);
+}
+
+function handleDigit(digit) {
+  if (selectedIdx === -1) return;
+  if (!isEditable(selectedIdx)) return;
+
+  const notesMode = !!els.notesToggle.checked;
+  if (notesMode) toggleNoteAt(selectedIdx, digit);
+  else setValueAt(selectedIdx, digit);
+
+  renderAll();
+}
+
+function handleErase() {
+  if (selectedIdx === -1) return;
+  if (!isEditable(selectedIdx)) return;
+
+  // erase clears value if present; otherwise clears notes
+  if (values[selectedIdx] !== 0) values[selectedIdx] = 0;
+  else notes[selectedIdx] = 0;
+
+  renderAll();
+}
+
+function runCheck() {
+  const result = isCompleteAndValid();
+  if (result.ok) setStatus("Solved!");
+  else if (result.reason === "Conflicts") setStatus("Fix conflicts first");
+  else setStatus("Not solved yet");
+  renderAll();
+}
+
+function wireEvents() {
+  els.pad.addEventListener("click", (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    const digit = t.dataset.digit;
+    const action = t.dataset.action;
+    if (digit) handleDigit(Number(digit));
+    else if (action === "erase") handleErase();
+    else if (action === "deselect") selectCell(-1);
+  });
+
+  els.newPuzzleBtn.addEventListener("click", () => {
+    // simple random different puzzle
+    const next = Math.floor(Math.random() * PUZZLES.length);
+    loadPuzzle(next === puzzleIdx ? (next + 1) % PUZZLES.length : next);
+  });
+
+  els.resetBtn.addEventListener("click", () => resetPuzzle());
+  els.checkBtn.addEventListener("click", () => runCheck());
+
+  document.addEventListener("keydown", (e) => {
+    // don't steal shortcuts with ctrl/cmd/alt
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const k = e.key;
+
+    if (k === "Escape") {
+      selectCell(-1);
+      return;
+    }
+
+    if (k === "ArrowUp") {
+      e.preventDefault();
+      moveSelection(-1, 0);
+      return;
+    }
+    if (k === "ArrowDown") {
+      e.preventDefault();
+      moveSelection(1, 0);
+      return;
+    }
+    if (k === "ArrowLeft") {
+      e.preventDefault();
+      moveSelection(0, -1);
+      return;
+    }
+    if (k === "ArrowRight") {
+      e.preventDefault();
+      moveSelection(0, 1);
+      return;
+    }
+
+    if (k === "Backspace" || k === "Delete" || k === "0") {
+      e.preventDefault();
+      handleErase();
+      return;
+    }
+
+    if (k === "n" || k === "N") {
+      els.notesToggle.checked = !els.notesToggle.checked;
+      setStatus(els.notesToggle.checked ? "Notes: ON" : "Notes: OFF");
+      return;
+    }
+
+    if (k >= "1" && k <= "9") {
+      e.preventDefault();
+      handleDigit(Number(k));
+    }
+  });
+}
+
+function init() {
+  buildBoardDomOnce();
+  wireEvents();
+  loadPuzzle(0);
+}
+
+init();
+

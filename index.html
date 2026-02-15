@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Interactive Sudoku puzzle with touch-friendly and keyboard-friendly interface. Includes easy, medium, and hard puzzles with notes support." />
+    <meta name="theme-color" content="#0d1117" />
+    <title>Sudoku</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="title">
+          <h1>Sudoku</h1>
+          <p class="subtitle">Keyboard + touch friendly puzzle UI</p>
+        </div>
+
+        <div class="meta" aria-live="polite">
+          <span class="pill" id="difficultyPill">Difficulty: —</span>
+          <span class="pill" id="statusPill">Ready</span>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="boardCard" aria-label="Sudoku board">
+          <div class="toolbar" aria-label="Board controls">
+            <button class="btn" id="newPuzzleBtn" type="button">New puzzle</button>
+            <button class="btn" id="resetBtn" type="button">Reset</button>
+            <button class="btn" id="checkBtn" type="button">Check</button>
+
+            <label class="toggle" title="Toggle notes mode (N)">
+              <input id="notesToggle" type="checkbox" />
+              <span>Notes</span>
+            </label>
+          </div>
+
+          <div class="boardWrap">
+            <div
+              class="board"
+              id="board"
+              role="grid"
+              aria-label="Sudoku grid"
+              aria-rowcount="9"
+              aria-colcount="9"
+            ></div>
+          </div>
+
+          <div class="hintRow">
+            <span class="hint">Tip: click a cell, then type 1–9. Use arrows to move. Delete clears. “N” toggles notes.</span>
+          </div>
+        </section>
+
+        <aside class="padCard" aria-label="Number pad">
+          <div class="padHeader">
+            <h2>Input</h2>
+            <p class="padSubtitle">Tap numbers on mobile</p>
+          </div>
+
+          <div class="pad" role="group" aria-label="Number pad" id="pad">
+            <button class="padBtn" data-digit="1" type="button">1</button>
+            <button class="padBtn" data-digit="2" type="button">2</button>
+            <button class="padBtn" data-digit="3" type="button">3</button>
+            <button class="padBtn" data-digit="4" type="button">4</button>
+            <button class="padBtn" data-digit="5" type="button">5</button>
+            <button class="padBtn" data-digit="6" type="button">6</button>
+            <button class="padBtn" data-digit="7" type="button">7</button>
+            <button class="padBtn" data-digit="8" type="button">8</button>
+            <button class="padBtn" data-digit="9" type="button">9</button>
+            <button class="padBtn padBtnWide" data-action="erase" type="button">Erase</button>
+            <button class="padBtn padBtnWide" data-action="deselect" type="button">Deselect</button>
+          </div>
+
+          <div class="legend">
+            <div class="legendItem"><span class="swatch swatchGiven"></span><span>Given</span></div>
+            <div class="legendItem"><span class="swatch swatchFill"></span><span>Fill</span></div>
+            <div class="legendItem"><span class="swatch swatchConflict"></span><span>Conflict</span></div>
+            <div class="legendItem"><span class="swatch swatchSel"></span><span>Selected</span></div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
