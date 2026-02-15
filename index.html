@@ -26,6 +26,11 @@
         <section class="boardCard" aria-label="Sudoku board">
           <div class="toolbar" aria-label="Board controls">
             <button class="btn" id="newPuzzleBtn" type="button">New puzzle</button>
+            <div class="seg" role="group" aria-label="Difficulty">
+              <button class="btn diffBtn isActive" type="button" data-difficulty="Easy">Easy</button>
+              <button class="btn diffBtn" type="button" data-difficulty="Medium">Medium</button>
+              <button class="btn diffBtn" type="button" data-difficulty="Hard">Hard</button>
+            </div>
             <button class="btn" id="resetBtn" type="button">Reset</button>
             <button class="btn" id="checkBtn" type="button">Check</button>
 
